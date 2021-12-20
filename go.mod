@@ -1,4 +1,4 @@
-module github.com/sylabs/scs-library-client
+module github.com/apptainer/container-library-client
 
 go 1.17
 
