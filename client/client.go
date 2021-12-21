@@ -46,7 +46,7 @@ type Client struct {
 	Logger log.Logger
 }
 
-const defaultBaseURL = "https://library.sylabs.io"
+const defaultBaseURL = ""
 
 // NewClient sets up a new Cloud-Library Service client with the specified base URL and auth token.
 func NewClient(cfg *Config) (*Client, error) {
@@ -58,6 +58,10 @@ func NewClient(cfg *Config) (*Client, error) {
 	bu := defaultBaseURL
 	if cfg.BaseURL != "" {
 		bu = cfg.BaseURL
+	}
+
+	if bu == "" {
+		return nil, fmt.Errorf("no BaseURL supplied")
 	}
 
 	// If baseURL has a path component, ensure it is terminated with a separator, to prevent
