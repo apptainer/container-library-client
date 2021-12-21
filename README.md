@@ -6,6 +6,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/apptainer/container-library-client)](https://goreportcard.com/report/github.com/apptainer/container-library-client)
 
 This project provides a Go client for the Apptainer container library.
+Forked from [sylabs/scs-client-library](https://github.com/sylabs/scs-client-library).
 
 ## Go Version Compatibility
 
