@@ -12,6 +12,8 @@ import (
 	"testing"
 )
 
+const testBaseURL = "https://library.example.io"
+
 func TestNewClient(t *testing.T) {
 	httpClient := &http.Client{}
 
@@ -24,7 +26,7 @@ func TestNewClient(t *testing.T) {
 		wantUserAgent  string
 		wantHTTPClient *http.Client
 	}{
-		{"NilConfig", nil, false, defaultBaseURL + "/", "", "", http.DefaultClient},
+		{"NilConfig", nil, true, "", "", "", http.DefaultClient},
 		{"HTTPBaseURL", &Config{
 			BaseURL: "http://library.staging.sylabs.io",
 		}, false, "http://library.staging.sylabs.io/", "", "", http.DefaultClient},
@@ -45,13 +47,16 @@ func TestNewClient(t *testing.T) {
 		}, true, "", "", "", nil},
 		{"AuthToken", &Config{
 			AuthToken: "blah",
-		}, false, defaultBaseURL + "/", "blah", "", http.DefaultClient},
+			BaseURL:   testBaseURL,
+		}, false, testBaseURL + "/", "blah", "", http.DefaultClient},
 		{"UserAgent", &Config{
 			UserAgent: "Secret Agent Man",
-		}, false, defaultBaseURL + "/", "", "Secret Agent Man", http.DefaultClient},
+			BaseURL:   testBaseURL,
+		}, false, testBaseURL + "/", "", "Secret Agent Man", http.DefaultClient},
 		{"HTTPClient", &Config{
 			HTTPClient: httpClient,
-		}, false, defaultBaseURL + "/", "", "", httpClient},
+			BaseURL:    testBaseURL,
+		}, false, testBaseURL + "/", "", "", httpClient},
 	}
 
 	for _, tt := range tests {
@@ -83,6 +88,9 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestNewRequest(t *testing.T) {
+	testConfig := &Config{
+		BaseURL: testBaseURL,
+	}
 	tests := []struct {
 		name           string
 		cfg            *Config
@@ -95,11 +103,11 @@ func TestNewRequest(t *testing.T) {
 		wantAuthBearer string
 		wantUserAgent  string
 	}{
-		{"BadMethod", nil, "b@d	", "", "", "", true, "", "", ""},
-		{"NilConfigGet", nil, http.MethodGet, "/path", "", "", false, "https://library.sylabs.io/path", "", ""},
-		{"NilConfigPost", nil, http.MethodPost, "/path", "", "", false, "https://library.sylabs.io/path", "", ""},
-		{"NilConfigPostRawQuery", nil, http.MethodPost, "/path", "a=b", "", false, "https://library.sylabs.io/path?a=b", "", ""},
-		{"NilConfigPostBody", nil, http.MethodPost, "/path", "", "body", false, "https://library.sylabs.io/path", "", ""},
+		{"BadMethod", testConfig, "b@d	", "", "", "", true, "", "", ""},
+		{"NilConfigGet", testConfig, http.MethodGet, "/path", "", "", false, testBaseURL + "/path", "", ""},
+		{"NilConfigPost", testConfig, http.MethodPost, "/path", "", "", false, testBaseURL + "/path", "", ""},
+		{"NilConfigPostRawQuery", testConfig, http.MethodPost, "/path", "a=b", "", false, testBaseURL + "/path?a=b", "", ""},
+		{"NilConfigPostBody", testConfig, http.MethodPost, "/path", "", "body", false, testBaseURL + "/path", "", ""},
 		{"HTTPBaseURL", &Config{
 			BaseURL: "http://library.staging.sylabs.io",
 		}, http.MethodGet, "path", "", "", false, "http://library.staging.sylabs.io/path", "", ""},
@@ -117,10 +125,12 @@ func TestNewRequest(t *testing.T) {
 		}, http.MethodGet, "path2", "", "", false, "https://library.staging.sylabs.io/path1/path2", "", ""},
 		{"AuthToken", &Config{
 			AuthToken: "blah",
-		}, http.MethodGet, "/path", "", "", false, "https://library.sylabs.io/path", "BEARER blah", ""},
+			BaseURL:   testBaseURL,
+		}, http.MethodGet, "/path", "", "", false, testBaseURL + "/path", "BEARER blah", ""},
 		{"UserAgent", &Config{
 			UserAgent: "Secret Agent Man",
-		}, http.MethodGet, "/path", "", "", false, "https://library.sylabs.io/path", "", "Secret Agent Man"},
+			BaseURL:   testBaseURL,
+		}, http.MethodGet, "/path", "", "", false, testBaseURL + "/path", "", "Secret Agent Man"},
 	}
 
 	for _, tt := range tests {
