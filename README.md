@@ -5,8 +5,12 @@
 [![Code Coverage](https://codecov.io/gh/apptainer/container-library-client/branch/master/graph/badge.svg)](https://codecov.io/gh/apptainer/container-library-client)
 [![Go Report Card](https://goreportcard.com/badge/github.com/apptainer/container-library-client)](https://goreportcard.com/report/github.com/apptainer/container-library-client)
 
-This project provides a Go client for the Apptainer container library.
+This project provides a Go client to Apptainer for the container library.
 Forked from [sylabs/scs-library-client](https://github.com/sylabs/scs-library-client).
+
+This is maintained as a sub-project by the Apptainer project.
+To contribute, see the [Apptainer CONTRIBUTING
+file](https://github.com/apptainer/apptainer/blob/main/CONTRIBUTING.md).
 
 ## Go Version Compatibility
 
