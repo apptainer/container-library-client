@@ -2,7 +2,7 @@
 
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/apptainer/container-library-client)](https://pkg.go.dev/github.com/apptainer/container-library-client/client)
 [![Build Status](https://github.com/apptainer/container-library-client/actions/workflows/ci.yml/badge.svg)](https://github.com/apptainer/container-library-client/actions/workflows/ci.yml)
-[![Code Coverage](https://codecov.io/gh/apptainer/container-library-client/branch/master/graph/badge.svg)](https://codecov.io/gh/apptainer/container-library-client)
+[![Code Coverage](https://codecov.io/gh/apptainer/container-library-client/branch/main/graph/badge.svg)](https://codecov.io/gh/apptainer/container-library-client)
 [![Go Report Card](https://goreportcard.com/badge/github.com/apptainer/container-library-client)](https://goreportcard.com/report/github.com/apptainer/container-library-client)
 
 This project provides a Go client to Apptainer for the container library.
