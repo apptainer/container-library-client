@@ -93,7 +93,7 @@ func parsePath(rawPath string) (path string, tags []string, err error) {
 }
 
 // parse parses a raw Library reference, optionally taking into account ambiguity that exists
-// within Apptainer Library references.
+// within Library references.
 func parse(rawRef string, ambiguous bool) (*Ref, error) {
 	var u *url.URL
 
@@ -155,7 +155,7 @@ func Parse(rawRef string) (*Ref, error) {
 }
 
 // ParseAmbiguous behaves like Parse, but takes into account ambiguity that exists within
-// Apptainer Library references that begin with the prefix "library://".
+// Library references that begin with the prefix "library://".
 //
 // In particular, Apptainer supports hostless Library references in the form of "library://path".
 // This creates ambiguity in whether or not a host is present in the path or not. To account for
