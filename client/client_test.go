@@ -6,6 +6,7 @@
 package client
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -140,7 +141,7 @@ func TestNewRequest(t *testing.T) {
 				t.Fatalf("failed to create client: %v", err)
 			}
 
-			r, err := c.newRequest(tt.method, tt.path, tt.rawQuery, strings.NewReader(tt.body))
+			r, err := c.newRequest(context.Background(), tt.method, tt.path, tt.rawQuery, strings.NewReader(tt.body))
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("got err %v, wantErr %v", err, tt.wantErr)
 			}
