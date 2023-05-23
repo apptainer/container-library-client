@@ -1,5 +1,5 @@
-github.com/apptainer/sif/v2 v2.11.1 h1:BKSmKVdbELgmjstE9wRgnHFPvV3yICKxf85/WS3MvOY=
-github.com/apptainer/sif/v2 v2.11.1/go.mod h1:0MB3L5RqJrZBl9zOll2BpEycEmEzRo4mMcIwCeLEJKw=
+github.com/apptainer/sif/v2 v2.11.4 h1:HT10EePvMY95yRC3H5PMYy5JrEbJqEyBF6rsuV3eyso=
+github.com/apptainer/sif/v2 v2.11.4/go.mod h1:AGT1mh0wgRdpTHXomZYr7JFVO3glsHfkwzzi0cLzqsU=
 github.com/blang/semver/v4 v4.0.0 h1:1PFHFE6yCCTv8C1TeyNNarDzntLi7wMI5i/pzqYIsAM=
 github.com/blang/semver/v4 v4.0.0/go.mod h1:IbckMUScFkM3pff0VJDNKRiT6TG/YpiHIM2yvyW5YoQ=
 github.com/go-log/log v0.2.0 h1:z8i91GBudxD5L3RmF0KVpetCbcGWAV7q1Tw1eRwQM9Q=
