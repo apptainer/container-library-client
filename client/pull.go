@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022, Sylabs Inc. All rights reserved.
+// Copyright (c) 2018-2023, Sylabs Inc. All rights reserved.
 // This software is licensed under a 3-clause BSD license. Please consult the
 // LICENSE.md file distributed with the sources of this project regarding your
 // rights to use or distribute this software.
@@ -62,6 +62,9 @@ func (c *Client) DownloadImage(ctx context.Context, w io.Writer, arch, path, tag
 		err := jsonresp.ReadError(res.Body)
 		if err != nil {
 			return fmt.Errorf("download did not succeed: %v", err)
+		}
+		if res.StatusCode == http.StatusUnauthorized {
+			return ErrUnauthorized
 		}
 		return fmt.Errorf("unexpected http status code: %d", res.StatusCode)
 	}
@@ -158,16 +161,17 @@ func (c *Client) ConcurrentDownloadImage(ctx context.Context, dst *os.File, arch
 	}
 
 	// Check for direct OCI registry access
-	if err := c.ociDownloadImage(ctx, arch, name, tag, dst, spec, pb); err == nil {
-		return err
-	} else if !errors.Is(err, errOCIDownloadNotSupported) {
-		// Return OCI download error or fallback to legacy download
-		return err
+	if err := c.ociDownloadImage(ctx, arch, name, tag, dst, spec, pb); err != nil {
+		if !errors.Is(err, errOCIDownloadNotSupported) {
+			// Return OCI download error or fallback to legacy download
+			return err
+		}
+
+		c.Logger.Log("Fallback to (legacy) library download")
+
+		return c.legacyDownloadImage(ctx, arch, name, tag, dst, spec, pb)
 	}
-
-	c.Logger.Log("Fallback to (legacy) library download")
-
-	return c.legacyDownloadImage(ctx, arch, name, tag, dst, spec, pb)
+	return nil
 }
 
 func (c *Client) legacyDownloadImage(ctx context.Context, arch, name, tag string, dst io.WriterAt, spec *Downloader, pb ProgressBar) error {
@@ -227,7 +231,10 @@ func (c *Client) legacyDownloadImage(ctx context.Context, arch, name, tag string
 	}
 
 	if res.StatusCode != http.StatusSeeOther {
-		return fmt.Errorf("unexpected HTTP status %d: %v", res.StatusCode, err)
+		if res.StatusCode == http.StatusUnauthorized {
+			return ErrUnauthorized
+		}
+		return fmt.Errorf("unexpected http status %d", res.StatusCode)
 	}
 
 	// Get image metadata to determine image size
