@@ -40,6 +40,10 @@ func (c *Client) ociRegistryAuth(ctx context.Context, name string, accessTypes [
 	v := url.Values{}
 	v.Set("namespace", name)
 
+	// Setting 'mapped' to '1' (true) enables support for mapping short library refs to
+	// fully-qualified name
+	v.Set("mapped", strconv.Itoa(1))
+
 	ats := make([]string, 0, len(accessTypes))
 	for _, at := range accessTypes {
 		ats = append(ats, string(at))
@@ -445,7 +449,11 @@ func (r *ociRegistry) doRequestWithCredentials(req *http.Request, creds credenti
 	if code := res.StatusCode; code/100 != 2 {
 		defer res.Body.Close()
 
-		return nil, fmt.Errorf("unexpected HTTP status %v", res.StatusCode)
+		if code == http.StatusUnauthorized {
+			return nil, ErrUnauthorized
+		}
+
+		return nil, fmt.Errorf("unexpected http status %v", res.StatusCode)
 	}
 
 	return res, nil
@@ -488,6 +496,10 @@ func (r *ociRegistry) doRequest(req *http.Request, creds credentials, opts ...mo
 
 			opts = append(opts, withAuthenticateHeader(res.Header.Get("WWW-Authenticate")))
 			return r.retryRequestWithCredentials(req, creds, opts...)
+		}
+
+		if code == http.StatusUnauthorized {
+			return nil, ErrUnauthorized
 		}
 
 		return nil, fmt.Errorf("unexpected http status %v", code)
@@ -630,6 +642,7 @@ func (r *ociRegistry) getImageConfig(ctx context.Context, creds credentials, nam
 
 var errOCIDownloadNotSupported = errors.New("not supported")
 
+// newOCIRegistry returns *ociRegistry, credentials for that registry, and the (optionally) remapped image name
 func (c *Client) newOCIRegistry(ctx context.Context, name string, accessTypes []accessType) (*ociRegistry, *bearerTokenCredentials, string, error) {
 	// Attempt to obtain (direct) OCI registry auth token
 	originalName := name
