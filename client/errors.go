@@ -18,6 +18,8 @@ var (
 	errOCIDownloadNotSupported  = errors.New("not supported")
 	errGettingPresignedURL      = errors.New("error getting presigned URL")
 	errParsingPresignedURL      = errors.New("error parsing presigned URL")
+	errNoBaseURL                = errors.New("no BaseURL supplied")
+
 	// ErrRefSchemeNotValid represents a ref with an invalid scheme.
 	ErrRefSchemeNotValid = errors.New("library: ref scheme not valid")
 	// ErrRefUserNotPermitted represents a ref with an invalid user.

@@ -62,7 +62,7 @@ func NewClient(cfg *Config) (*Client, error) {
 	}
 
 	if bu == "" {
-		return nil, fmt.Errorf("no BaseURL supplied")
+		return nil, errNoBaseURL
 	}
 
 	// If baseURL has a path component, ensure it is terminated with a separator, to prevent
