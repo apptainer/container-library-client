@@ -154,12 +154,12 @@ func (m *v2ImageUploadMockService) MockImageFileEndpoint(w http.ResponseWriter, 
 	m.initCalled = true
 }
 
-func (m *v2ImageUploadMockService) MockS3PresignedURLPUTEndpoint(w http.ResponseWriter, r *http.Request) {
+func (m *v2ImageUploadMockService) MockS3PresignedURLPUTEndpoint(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	m.putCalled = true
 }
 
-func (m *v2ImageUploadMockService) MockImageFileCompleteEndpoint(w http.ResponseWriter, r *http.Request) {
+func (m *v2ImageUploadMockService) MockImageFileCompleteEndpoint(w http.ResponseWriter, _ *http.Request) {
 	response := UploadImageComplete{
 		Quota: QuotaResponse{
 			QuotaTotalBytes: testQuotaTotalBytes,

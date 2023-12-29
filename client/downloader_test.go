@@ -49,7 +49,7 @@ func (l *stdLogger) Logf(f string, v ...interface{}) {
 	log.Printf(f, v...)
 }
 
-func parseRangeHeader(t *testing.T, val string) (int64, int64) {
+func parseRangeHeader(_ *testing.T, val string) (int64, int64) {
 	if val == "" {
 		return 0, 0
 	}
