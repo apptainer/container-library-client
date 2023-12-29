@@ -78,7 +78,7 @@ func ParseLibraryPath(libraryRef string) (entity string, collection string, cont
 		collection = ""
 		container = ""
 		tags = []string{}
-		return
+		return entity, collection, container, tags
 	}
 
 	if strings.Contains(container, ":") {

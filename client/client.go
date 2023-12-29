@@ -7,7 +7,6 @@ package client
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,9 +15,6 @@ import (
 
 	"github.com/go-log/log"
 )
-
-// ErrUnauthorized represents HTTP status "401 Unauthorized"
-var ErrUnauthorized = errors.New("unauthorized")
 
 // Config contains the client configuration.
 type Config struct {
@@ -66,7 +62,7 @@ func NewClient(cfg *Config) (*Client, error) {
 	}
 
 	if bu == "" {
-		return nil, fmt.Errorf("no BaseURL supplied")
+		return nil, errNoBaseURL
 	}
 
 	// If baseURL has a path component, ensure it is terminated with a separator, to prevent
@@ -81,7 +77,7 @@ func NewClient(cfg *Config) (*Client, error) {
 		return nil, err
 	}
 	if baseURL.Scheme != "http" && baseURL.Scheme != "https" {
-		return nil, fmt.Errorf("unsupported protocol scheme %q", baseURL.Scheme)
+		return nil, fmt.Errorf("%w: unsupported protocol scheme %q", errHTTP, baseURL.Scheme)
 	}
 
 	c := &Client{
