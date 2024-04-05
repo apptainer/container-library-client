@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022, Sylabs Inc. All rights reserved.
+// Copyright (c) 2019-2023, Sylabs Inc. All rights reserved.
 // This software is licensed under a 3-clause BSD license. Please consult the LICENSE.md file
 // distributed with the sources of this project regarding your rights to use or distribute this
 // software.
@@ -35,16 +35,11 @@ var DefaultConfig = &Config{}
 
 // Client describes the client details.
 type Client struct {
-	// Base URL of the service.
-	BaseURL *url.URL
-	// Auth token to include in the Authorization header of each request (if supplied).
-	AuthToken string
-	// User agent to include in each request (if supplied).
-	UserAgent string
-	// HTTPClient to use to make HTTP requests.
-	HTTPClient *http.Client
-	// Logger to be used when output is generated
-	Logger log.Logger
+	baseURL    *url.URL
+	authToken  string
+	userAgent  string
+	httpClient *http.Client
+	logger     log.Logger
 }
 
 const defaultBaseURL = ""
@@ -81,52 +76,48 @@ func NewClient(cfg *Config) (*Client, error) {
 	}
 
 	c := &Client{
-		BaseURL:   baseURL,
-		AuthToken: cfg.AuthToken,
-		UserAgent: cfg.UserAgent,
+		baseURL:   baseURL,
+		authToken: cfg.AuthToken,
+		userAgent: cfg.UserAgent,
 	}
 
 	// Set HTTP client
 	if cfg.HTTPClient != nil {
-		c.HTTPClient = cfg.HTTPClient
+		c.httpClient = cfg.HTTPClient
 	} else {
-		c.HTTPClient = http.DefaultClient
+		c.httpClient = http.DefaultClient
 	}
 
 	if cfg.Logger != nil {
-		c.Logger = cfg.Logger
+		c.logger = cfg.Logger
 	} else {
-		c.Logger = log.DefaultLogger
+		c.logger = log.DefaultLogger
 	}
 
 	return c, nil
 }
 
-// newRequestWithURL returns a new Request given a method, url, and (optional) body.
-func (c *Client) newRequestWithURL(ctx context.Context, method, url string, body io.Reader) (*http.Request, error) {
-	r, err := http.NewRequestWithContext(ctx, method, url, body)
+// newRequest returns a new Request given a method, relative path, rawQuery, and (optional) body.
+func (c *Client) newRequest(ctx context.Context, method, path, rawQuery string, body io.Reader) (*http.Request, error) {
+	u := c.baseURL.ResolveReference(&url.URL{
+		Path:     path,
+		RawQuery: rawQuery,
+	})
+
+	r, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return nil, err
 	}
 
-	if v := c.AuthToken; v != "" {
+	if v := c.authToken; v != "" {
 		if err := (bearerTokenCredentials{authToken: v}).ModifyRequest(r); err != nil {
 			return nil, err
 		}
 	}
 
-	if v := c.UserAgent; v != "" {
+	if v := c.userAgent; v != "" {
 		r.Header.Set("User-Agent", v)
 	}
 
 	return r, nil
-}
-
-// newRequest returns a new Request given a method, relative path, rawQuery, and (optional) body.
-func (c *Client) newRequest(ctx context.Context, method, path, rawQuery string, body io.Reader) (*http.Request, error) {
-	u := c.BaseURL.ResolveReference(&url.URL{
-		Path:     path,
-		RawQuery: rawQuery,
-	})
-	return c.newRequestWithURL(ctx, method, u.String(), body)
 }

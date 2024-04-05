@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022, Sylabs Inc. All rights reserved.
+// Copyright (c) 2019-2023, Sylabs Inc. All rights reserved.
 // This software is licensed under a 3-clause BSD license. Please consult the LICENSE.md file
 // distributed with the sources of this project regarding your rights to use or distribute this
 // software.
@@ -7,8 +7,13 @@ package client
 
 import (
 	"context"
+	crypto_rand "crypto/rand"
+	"encoding/binary"
 	"io"
+	"log"
+	math_rand "math/rand"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 )
@@ -68,19 +73,19 @@ func TestNewClient(t *testing.T) {
 			}
 
 			if err == nil {
-				if got, want := c.BaseURL.String(), tt.wantURL; got != want {
+				if got, want := c.baseURL.String(), tt.wantURL; got != want {
 					t.Errorf("got host %v, want %v", got, want)
 				}
 
-				if got, want := c.AuthToken, tt.wantAuthToken; got != want {
+				if got, want := c.authToken, tt.wantAuthToken; got != want {
 					t.Errorf("got auth token %v, want %v", got, want)
 				}
 
-				if got, want := c.UserAgent, tt.wantUserAgent; got != want {
+				if got, want := c.userAgent, tt.wantUserAgent; got != want {
 					t.Errorf("got user agent %v, want %v", got, want)
 				}
 
-				if got, want := c.HTTPClient, tt.wantHTTPClient; got != want {
+				if got, want := c.httpClient, tt.wantHTTPClient; got != want {
 					t.Errorf("got HTTP client %v, want %v", got, want)
 				}
 			}
@@ -191,4 +196,19 @@ func TestNewRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func seedRandomNumberGenerator() {
+	var b [8]byte
+	if _, err := crypto_rand.Read(b[:]); err != nil {
+		log.Fatalf("error seeding random number generator: %v", err)
+	}
+	math_rand.Seed(int64(binary.LittleEndian.Uint64(b[:])))
+}
+
+func TestMain(m *testing.M) {
+	// Total overkill seeding the random number generator
+	seedRandomNumberGenerator()
+
+	os.Exit(m.Run())
 }
