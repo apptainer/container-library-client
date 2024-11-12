@@ -1,6 +1,8 @@
 module github.com/apptainer/container-library-client
 
-go 1.18
+go 1.22.5
+
+toolchain go1.22.7
 
 require (
 	github.com/apptainer/sif/v2 v2.19.3
