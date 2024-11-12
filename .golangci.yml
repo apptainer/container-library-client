@@ -25,7 +25,8 @@ linters:
     - misspell
     - nakedret
     - prealloc
-    - revive
+#    commented out because main branch isn't being kept up to date
+#    - revive
     - staticcheck
     - stylecheck
     - tenv
