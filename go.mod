@@ -1,11 +1,10 @@
 module github.com/apptainer/container-library-client
 
 go 1.22.5
-
-toolchain go1.22.7
+toolchain go1.24.1
 
 require (
-	github.com/apptainer/sif/v2 v2.20.2
+	github.com/apptainer/sif/v2 v2.21.1
 	github.com/blang/semver/v4 v4.0.0
 	github.com/go-log/log v0.2.0
 	github.com/opencontainers/go-digest v1.0.0
@@ -15,6 +14,6 @@ require (
 )
 
 require (
-	github.com/google/go-containerregistry v0.20.2 // indirect
+	github.com/google/go-containerregistry v0.20.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 )
