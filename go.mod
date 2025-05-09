@@ -2,8 +2,6 @@ module github.com/apptainer/container-library-client
 
 go 1.23.6
 
-toolchain go1.24.1
-
 require (
 	github.com/apptainer/sif/v2 v2.21.1
 	github.com/blang/semver/v4 v4.0.0
