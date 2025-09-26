@@ -1,6 +1,6 @@
 module github.com/apptainer/container-library-client
 
-go 1.23.6
+go 1.24.0
 
 require (
 	github.com/apptainer/sif/v2 v2.21.1
@@ -9,7 +9,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/sylabs/json-resp v0.9.5
-	golang.org/x/sync v0.16.0
+	golang.org/x/sync v0.17.0
 )
 
 require (
