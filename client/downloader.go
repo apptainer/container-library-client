@@ -7,7 +7,6 @@ package client
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -46,7 +45,7 @@ func minInt64(a, b int64) int64 {
 // Download performs download of contents at url by writing 'size' bytes to 'dst' using credentials 'c'.
 func (c *Client) multipartDownload(ctx context.Context, u string, creds credentials, w io.WriterAt, size int64, spec *Downloader, pb ProgressBar) error {
 	if size <= 0 {
-		return fmt.Errorf("invalid image size (%v)", size)
+		return fmt.Errorf("%w: invalid image size (%v)", errBadRequest, size)
 	}
 
 	// Initialize the progress bar using passed size
@@ -58,7 +57,7 @@ func (c *Client) multipartDownload(ctx context.Context, u string, creds credenti
 	// Calculate # of parts
 	parts := uint(1 + (size-1)/spec.PartSize)
 
-	c.logger.Logf("size: %d, parts: %d, streams: %d, partsize: %d", size, parts, spec.Concurrency, spec.PartSize)
+	c.Logger.Logf("size: %d, parts: %d, streams: %d, partsize: %d", size, parts, spec.Concurrency, spec.PartSize)
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -67,7 +66,7 @@ func (c *Client) multipartDownload(ctx context.Context, u string, creds credenti
 
 	// Create download part workers
 	for n := uint(0); n < spec.Concurrency; n++ {
-		g.Go(c.downloadWorker(ctx, u, creds, ch, pb))
+		g.Go(c.ociDownloadWorker(ctx, u, creds, ch, pb))
 	}
 
 	// Add part download requests
@@ -84,11 +83,11 @@ func (c *Client) multipartDownload(ctx context.Context, u string, creds credenti
 	return g.Wait()
 }
 
-func (c *Client) downloadWorker(ctx context.Context, u string, creds credentials, ch chan filePartDescriptor, pb ProgressBar) func() error {
+func (c *Client) ociDownloadWorker(ctx context.Context, u string, creds credentials, ch chan filePartDescriptor, pb ProgressBar) func() error {
 	return func() error {
 		// Iterate on channel 'ch' to handle download part requests
 		for ps := range ch {
-			written, err := c.downloadBlobPart(ctx, creds, u, &ps)
+			written, err := c.ociDownloadBlobPart(ctx, creds, u, &ps)
 			if err != nil {
 				// Cleanly abort progress bar on error
 				pb.Abort(true)
@@ -103,7 +102,7 @@ func (c *Client) downloadWorker(ctx context.Context, u string, creds credentials
 	}
 }
 
-func (c *Client) downloadBlobPart(ctx context.Context, creds credentials, u string, ps *filePartDescriptor) (int64, error) {
+func (c *Client) ociDownloadBlobPart(ctx context.Context, creds credentials, u string, ps *filePartDescriptor) (int64, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return 0, err
@@ -117,7 +116,7 @@ func (c *Client) downloadBlobPart(ctx context.Context, creds credentials, u stri
 
 	req.Header.Add("Range", fmt.Sprintf("bytes=%d-%d", ps.start, ps.end))
 
-	res, err := c.httpClient.Do(req)
+	res, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return 0, err
 	}
@@ -131,13 +130,13 @@ func parseContentRange(val string) (int64, error) {
 	e := strings.Split(val, " ")
 
 	if !strings.EqualFold(e[0], "bytes") {
-		return 0, errors.New("unexpected/malformed value")
+		return 0, errUnexpectedMalformedValue
 	}
 
 	rangeElems := strings.Split(e[1], "/")
 
 	if len(rangeElems) != 2 {
-		return 0, errors.New("unexpected/malformed value")
+		return 0, errUnexpectedMalformedValue
 	}
 
 	return strconv.ParseInt(rangeElems[1], 10, 0)

@@ -30,11 +30,19 @@ const mediaTypeSIFLayer = "application/vnd.sylabs.sif.layer.v1.sif"
 // ociRegistryAuth uses Cloud Library endpoint to determine if artifact can be pulled
 // directly from OCI registry.
 //
-// Returns url and credentials (if applicable) for that url.
-func (c *Client) ociRegistryAuth(ctx context.Context, name string, accessTypes []accessType) (*url.URL, *bearerTokenCredentials, error) {
+// Returns url, credentials (if applicable) for that url, and mapped name.
+//
+// The mapped name can be the same value as 'name' or mapped to a fully-qualified name
+// (ie. from "alpine" to "library/default/alpine") if supported by cloud library server.
+// It will never be an empty string ("")
+func (c *Client) ociRegistryAuth(ctx context.Context, name string, accessTypes []accessType) (*url.URL, *bearerTokenCredentials, string, error) {
 	// Build raw query string to get token for specified namespace and access
 	v := url.Values{}
 	v.Set("namespace", name)
+
+	// Setting 'mapped' to '1' (true) enables support for mapping short library refs to
+	// fully-qualified name
+	v.Set("mapped", strconv.Itoa(1))
 
 	ats := make([]string, 0, len(accessTypes))
 	for _, at := range accessTypes {
@@ -45,39 +53,44 @@ func (c *Client) ociRegistryAuth(ctx context.Context, name string, accessTypes [
 
 	req, err := c.newRequest(ctx, http.MethodGet, "v1/oci-redirect", v.Encode(), nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
-	if c.userAgent != "" {
-		req.Header.Set("User-Agent", c.userAgent)
+	if c.UserAgent != "" {
+		req.Header.Set("User-Agent", c.UserAgent)
 	}
 
-	res, err := c.httpClient.Do(req)
+	res, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error determining direct OCI registry access: %w", err)
+		return nil, nil, "", fmt.Errorf("error determining direct OCI registry access: %w", err)
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return nil, nil, fmt.Errorf("error determining direct OCI registry access: %w", err)
+		return nil, nil, "", fmt.Errorf("error determining direct OCI registry access: %w", err)
 	}
 
 	type ociDownloadRedirectResponse struct {
 		Token       string `json:"token"`
 		RegistryURI string `json:"url"`
+		Name        string `json:"name"`
 	}
 
 	var ociArtifactSpec ociDownloadRedirectResponse
 
 	if err := json.NewDecoder(res.Body).Decode(&ociArtifactSpec); err != nil {
-		return nil, nil, fmt.Errorf("error decoding direct OCI registry access response: %w", err)
+		return nil, nil, "", fmt.Errorf("error decoding direct OCI registry access response: %w", err)
+	}
+
+	if ociArtifactSpec.Name != "" && ociArtifactSpec.Name != name {
+		name = ociArtifactSpec.Name
 	}
 
 	endpoint, err := url.Parse(ociArtifactSpec.RegistryURI)
 	if err != nil {
-		return nil, nil, fmt.Errorf("malformed OCI registry URI %v: %v", ociArtifactSpec.RegistryURI, err)
+		return nil, nil, "", fmt.Errorf("malformed OCI registry URI %v: %w", ociArtifactSpec.RegistryURI, err)
 	}
-	return endpoint, &bearerTokenCredentials{authToken: ociArtifactSpec.Token}, nil
+	return endpoint, &bearerTokenCredentials{authToken: ociArtifactSpec.Token}, name, nil
 }
 
 const (
@@ -137,8 +150,6 @@ type ociRegistry struct {
 	logger     log.Logger
 }
 
-var errArchNotSpecified = errors.New("architecture not specified")
-
 func (r *ociRegistry) getManifestFromIndex(idx v1.Index, arch string) (digest.Digest, error) {
 	// If arch not supplied, return single manifest or error.
 	if arch == "" {
@@ -163,7 +174,7 @@ func (r *ociRegistry) getManifestFromIndex(idx v1.Index, arch string) (digest.Di
 	}
 
 	// If we make it here, no matching OS/architecture was found.
-	return "", fmt.Errorf("no matching OS/architecture (%v) found", arch)
+	return "", fmt.Errorf("%w: no matching OS/architecture (%v) found", errOCIRegistry, arch)
 }
 
 func (r *ociRegistry) getImageManifest(ctx context.Context, creds credentials, name, tag, arch string) (digest.Digest, v1.Manifest, error) {
@@ -187,12 +198,12 @@ func (r *ociRegistry) getImageDetails(ctx context.Context, creds credentials, na
 	}
 
 	if got, want := m.Config.MediaType, mediaTypeSIFConfig; got != want {
-		return v1.Descriptor{}, fmt.Errorf("unexpected media type error (got %v, want %v)", got, want)
+		return v1.Descriptor{}, fmt.Errorf("%w: unexpected media type error (got %v, want %v)", errOCIRegistry, got, want)
 	}
 
 	// There should always be exactly one layer (the image blob).
 	if n := len(m.Layers); n != 1 {
-		return v1.Descriptor{}, fmt.Errorf("unexpected # of layers: %v", n)
+		return v1.Descriptor{}, fmt.Errorf("%w: unexpected # of layers: %v", errOCIRegistry, n)
 	}
 
 	// If architecture was supplied, ensure the image config matches.
@@ -321,8 +332,6 @@ func parsePairs(value string) map[string]string {
 	return m
 }
 
-var errInvalidAuthHeader = errors.New("invalid auth header")
-
 type authHeader struct {
 	at      authType
 	realm   string
@@ -415,8 +424,6 @@ func withHTTPClient(client *http.Client) modifyRequestOption {
 	}
 }
 
-var errResetHTTPBody = errors.New("unable to reset HTTP request body")
-
 func (r *ociRegistry) doRequestWithCredentials(req *http.Request, creds credentials, opts ...modifyRequestOption) (*http.Response, error) {
 	opts = append(opts,
 		withUserAgent(r.userAgent),
@@ -436,7 +443,11 @@ func (r *ociRegistry) doRequestWithCredentials(req *http.Request, creds credenti
 	if code := res.StatusCode; code/100 != 2 {
 		defer res.Body.Close()
 
-		return nil, fmt.Errorf("unexpected HTTP status %v", res.StatusCode)
+		if code == http.StatusUnauthorized {
+			return nil, ErrUnauthorized
+		}
+
+		return nil, fmt.Errorf("%w: unexpected http status %v", errHTTP, res.StatusCode)
 	}
 
 	return res, nil
@@ -481,7 +492,11 @@ func (r *ociRegistry) doRequest(req *http.Request, creds credentials, opts ...mo
 			return r.retryRequestWithCredentials(req, creds, opts...)
 		}
 
-		return nil, fmt.Errorf("unexpected http status %v", code)
+		if code == http.StatusUnauthorized {
+			return nil, ErrUnauthorized
+		}
+
+		return nil, fmt.Errorf("%w: unexpected http status %v", errHTTP, code)
 	}
 
 	return res, nil
@@ -566,8 +581,6 @@ func (r *ociRegistry) downloadBlob(ctx context.Context, creds credentials, name 
 	return io.Copy(w, res.Body)
 }
 
-var errArchitectureNotPresent = errors.New("architecture not present")
-
 // validateImageConfig validates ic, and returns an error when ic is invalid.
 func validateImageConfig(ic imageConfig) error {
 	if ic.Architecture == "" {
@@ -595,8 +608,6 @@ func (e *unexpectedArchitectureError) Is(target error) bool {
 		(e.want == t.want || t.want == "")
 }
 
-var errDigestNotVerified = errors.New("digest not verified")
-
 func (r *ociRegistry) getImageConfig(ctx context.Context, creds credentials, name string, d digest.Digest) (imageConfig, error) {
 	var b bytes.Buffer
 	if _, err := r.downloadBlob(ctx, creds, name, d, "", &b); err != nil {
@@ -619,23 +630,28 @@ func (r *ociRegistry) getImageConfig(ctx context.Context, creds credentials, nam
 	return ic, nil
 }
 
-var errOCIDownloadNotSupported = errors.New("not supported")
-
-func (c *Client) newOCIRegistry(ctx context.Context, name string, accessTypes []accessType) (*ociRegistry, *bearerTokenCredentials, error) {
+// newOCIRegistry returns *ociRegistry, credentials for that registry, and the (optionally) remapped image name
+func (c *Client) newOCIRegistry(ctx context.Context, name string, accessTypes []accessType) (*ociRegistry, *bearerTokenCredentials, string, error) {
 	// Attempt to obtain (direct) OCI registry auth token
-	registryURI, creds, err := c.ociRegistryAuth(ctx, name, accessTypes)
+	originalName := name
+
+	registryURI, creds, name, err := c.ociRegistryAuth(ctx, name, accessTypes)
 	if err != nil {
-		return nil, nil, errOCIDownloadNotSupported
+		return nil, nil, "", errOCIDownloadNotSupported
 	}
 
 	// Download directly from OCI registry
-	c.logger.Logf("Using OCI registry endpoint %v", registryURI)
+	c.Logger.Logf("Using OCI registry endpoint %v", registryURI)
 
-	return &ociRegistry{baseURL: registryURI, httpClient: c.httpClient, logger: c.logger}, creds, nil
+	if name != "" && originalName != name {
+		c.Logger.Logf("OCI artifact name \"%v\" mapped to \"%v\"", originalName, name)
+	}
+
+	return &ociRegistry{baseURL: registryURI, httpClient: c.HTTPClient, logger: c.Logger}, creds, name, nil
 }
 
 func (c *Client) ociDownloadImage(ctx context.Context, arch, name, tag string, w io.WriterAt, spec *Downloader, pb ProgressBar) error {
-	reg, creds, err := c.newOCIRegistry(ctx, name, []accessType{accessTypePull})
+	reg, creds, name, err := c.newOCIRegistry(ctx, name, []accessType{accessTypePull})
 	if err != nil {
 		return err
 	}
@@ -663,7 +679,7 @@ func (e *unexpectedImageDigest) Error() string {
 }
 
 func (c *Client) ociUploadImage(ctx context.Context, r io.Reader, size int64, name, _ string, tags []string, description, hash string, callback UploadCallback) error {
-	reg, creds, err := c.newOCIRegistry(ctx, name, []accessType{accessTypePull, accessTypePush})
+	reg, creds, name, err := c.newOCIRegistry(ctx, name, []accessType{accessTypePull, accessTypePush})
 	if err != nil {
 		return err
 	}
@@ -714,12 +730,12 @@ func (c *Client) ociUploadImage(ctx context.Context, r io.Reader, size int64, na
 		}
 
 	} else {
-		c.logger.Logf("Skipping image blob upload (matching hash exists)")
+		c.Logger.Logf("Skipping image blob upload (matching hash exists)")
 
 		id = imageDigest
 
 		if _, err := io.Copy(sifHeader, io.LimitReader(r, sifHeaderSize)); err != nil {
-			return fmt.Errorf("error reading local SIF file header: %v", err)
+			return fmt.Errorf("error reading local SIF file header: %w", err)
 		}
 	}
 
@@ -754,10 +770,10 @@ func (c *Client) ociUploadImage(ctx context.Context, r io.Reader, size int64, na
 
 	// Add tags
 	for _, ref := range tags {
-		c.logger.Logf("Tag: %v", ref)
+		c.Logger.Logf("Tag: %v", ref)
 
 		if _, err := reg.uploadManifest(ctx, creds, name, ref, idx, v1.MediaTypeImageIndex); err != nil {
-			return fmt.Errorf("error uploading index")
+			return fmt.Errorf("error uploading index: %w", err)
 		}
 	}
 
@@ -769,7 +785,7 @@ func (r *ociRegistry) existingImageBlob(ctx context.Context, creds credentials, 
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, u.String(), nil)
 	if err != nil {
-		return false, fmt.Errorf("error checking for existing layer: %v", err)
+		return false, fmt.Errorf("error checking for existing layer: %w", err)
 	}
 
 	res, err := r.doRequest(req, creds)
@@ -895,7 +911,7 @@ func (r *ociRegistry) openUploadBlobSession(ctx context.Context, creds credentia
 	// Strip prefix from Authorization header
 	parts := strings.SplitN(req.Header.Get("Authorization"), " ", 2)
 	if len(parts) != 2 {
-		return nil, nil, fmt.Errorf("malformed Authorization header (%v)", req.Header.Get("Authorization"))
+		return nil, nil, fmt.Errorf("%w malformed Authorization header (%v)", errHTTP, req.Header.Get("Authorization"))
 	}
 
 	return u, &bearerTokenCredentials{authToken: parts[1]}, nil

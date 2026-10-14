@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022, Sylabs Inc. All rights reserved.
+// Copyright (c) 2018-2024, Sylabs Inc. All rights reserved.
 // This software is licensed under a 3-clause BSD license. Please consult the
 // LICENSE.md file distributed with the sources of this project regarding your
 // rights to use or distribute this software.
@@ -54,13 +54,10 @@ func IsImageHash(refPart string) bool {
 	return match
 }
 
-func ParseLibraryPath(libraryRef string) (string, string, string, []string) {
+func ParseLibraryPath(libraryRef string) (entity string, collection string, container string, tags []string) {
 	libraryRef = strings.TrimPrefix(libraryRef, "library://")
 
 	refParts := strings.Split(libraryRef, "/")
-
-	var entity, collection, container string
-	var tags []string
 
 	switch len(refParts) {
 	case 3:
