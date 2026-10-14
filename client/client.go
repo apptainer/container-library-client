@@ -35,11 +35,16 @@ var DefaultConfig = &Config{}
 
 // Client describes the client details.
 type Client struct {
-	baseURL    *url.URL
-	authToken  string
-	userAgent  string
-	httpClient *http.Client
-	logger     log.Logger
+	// Base URL of the service.
+	BaseURL *url.URL
+	// Auth token to include in the Authorization header of each request (if supplied).
+	AuthToken string
+	// User agent to include in each request (if supplied).
+	UserAgent string
+	// HTTPClient to use to make HTTP requests.
+	HTTPClient *http.Client
+	// Logger to be used when output is generated
+	Logger log.Logger
 }
 
 const defaultBaseURL = ""
@@ -57,7 +62,7 @@ func NewClient(cfg *Config) (*Client, error) {
 	}
 
 	if bu == "" {
-		return nil, fmt.Errorf("no BaseURL supplied")
+		return nil, errNoBaseURL
 	}
 
 	// If baseURL has a path component, ensure it is terminated with a separator, to prevent
@@ -72,52 +77,56 @@ func NewClient(cfg *Config) (*Client, error) {
 		return nil, err
 	}
 	if baseURL.Scheme != "http" && baseURL.Scheme != "https" {
-		return nil, fmt.Errorf("unsupported protocol scheme %q", baseURL.Scheme)
+		return nil, fmt.Errorf("%w: unsupported protocol scheme %q", errHTTP, baseURL.Scheme)
 	}
 
 	c := &Client{
-		baseURL:   baseURL,
-		authToken: cfg.AuthToken,
-		userAgent: cfg.UserAgent,
+		BaseURL:   baseURL,
+		AuthToken: cfg.AuthToken,
+		UserAgent: cfg.UserAgent,
 	}
 
 	// Set HTTP client
 	if cfg.HTTPClient != nil {
-		c.httpClient = cfg.HTTPClient
+		c.HTTPClient = cfg.HTTPClient
 	} else {
-		c.httpClient = http.DefaultClient
+		c.HTTPClient = http.DefaultClient
 	}
 
 	if cfg.Logger != nil {
-		c.logger = cfg.Logger
+		c.Logger = cfg.Logger
 	} else {
-		c.logger = log.DefaultLogger
+		c.Logger = log.DefaultLogger
 	}
 
 	return c, nil
 }
 
-// newRequest returns a new Request given a method, relative path, rawQuery, and (optional) body.
-func (c *Client) newRequest(ctx context.Context, method, path, rawQuery string, body io.Reader) (*http.Request, error) {
-	u := c.baseURL.ResolveReference(&url.URL{
-		Path:     path,
-		RawQuery: rawQuery,
-	})
-
-	r, err := http.NewRequestWithContext(ctx, method, u.String(), body)
+// newRequestWithURL returns a new Request given a method, url, and (optional) body.
+func (c *Client) newRequestWithURL(ctx context.Context, method, url string, body io.Reader) (*http.Request, error) {
+	r, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, err
 	}
 
-	if v := c.authToken; v != "" {
+	if v := c.AuthToken; v != "" {
 		if err := (bearerTokenCredentials{authToken: v}).ModifyRequest(r); err != nil {
 			return nil, err
 		}
 	}
 
-	if v := c.userAgent; v != "" {
+	if v := c.UserAgent; v != "" {
 		r.Header.Set("User-Agent", v)
 	}
 
 	return r, nil
+}
+
+// newRequest returns a new Request given a method, relative path, rawQuery, and (optional) body.
+func (c *Client) newRequest(ctx context.Context, method, path, rawQuery string, body io.Reader) (*http.Request, error) {
+	u := c.BaseURL.ResolveReference(&url.URL{
+		Path:     path,
+		RawQuery: rawQuery,
+	})
+	return c.newRequestWithURL(ctx, method, u.String(), body)
 }

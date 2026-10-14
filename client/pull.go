@@ -15,7 +15,77 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	jsonresp "github.com/sylabs/json-resp"
 )
+
+var errRequestedImageNotFound = fmt.Errorf("requested image was not found in the library")
+
+// DownloadImage will retrieve an image from the Container Library, saving it
+// into the specified io.Writer. The timeout value for this operation is set
+// within the context. It is recommended to use a large value (ie. 1800 seconds)
+// to prevent timeout when downloading large images.
+func (c *Client) DownloadImage(ctx context.Context, w io.Writer, arch, path, tag string, callback func(int64, io.Reader, io.Writer) error) error {
+	if arch != "" && !c.apiAtLeast(ctx, APIVersionV2ArchTags) {
+		c.Logger.Log("This library does not support architecture specific tags")
+		c.Logger.Log("The image returned may not be the requested architecture")
+	}
+
+	if strings.Contains(path, ":") {
+		return fmt.Errorf("%w: malformed image path: %s", errBadRequest, path)
+	}
+
+	if tag == "" {
+		tag = "latest"
+	}
+
+	apiPath := fmt.Sprintf("v1/imagefile/%s:%s", strings.TrimPrefix(path, "/"), tag)
+	q := url.Values{}
+	q.Add("arch", arch)
+
+	c.Logger.Logf("Pulling from URL: %s", apiPath)
+
+	req, err := c.newRequest(ctx, http.MethodGet, apiPath, q.Encode(), nil)
+	if err != nil {
+		return err
+	}
+
+	res, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode == http.StatusNotFound {
+		return errRequestedImageNotFound
+	}
+
+	if res.StatusCode != http.StatusOK {
+		err := jsonresp.ReadError(res.Body)
+		if err != nil {
+			return fmt.Errorf("download did not succeed: %w", err)
+		}
+		if res.StatusCode == http.StatusUnauthorized {
+			return ErrUnauthorized
+		}
+		return fmt.Errorf("%w: unexpected http status code: %d", errHTTP, res.StatusCode)
+	}
+
+	c.Logger.Logf("OK response received, beginning body download")
+
+	if callback != nil {
+		err = callback(res.ContentLength, res.Body, w)
+	} else {
+		_, err = io.Copy(w, res.Body)
+	}
+	if err != nil {
+		return err
+	}
+
+	c.Logger.Logf("Download complete")
+
+	return nil
+}
 
 // Downloader defines concurrency (# of requests) and part size for download operation.
 type Downloader struct {
@@ -27,6 +97,7 @@ type Downloader struct {
 
 	// BufferSize specifies buffer size used for multi-part downloader routine.
 	// Default is 32 KiB.
+	//
 	// Deprecated: this value will be ignored. It is retained for backwards compatibility.
 	BufferSize int64
 }
@@ -70,7 +141,7 @@ type ProgressBar interface {
 	Wait()
 }
 
-// DownloadImage implements a multi-part (concurrent) downloader for
+// ConcurrentDownloadImage implements a multi-part (concurrent) downloader for
 // Cloud Library images. spec is used to define transfer parameters. pb is an
 // optional progress bar interface.  If pb is nil, NoopProgressBar is used.
 //
@@ -78,13 +149,13 @@ type ProgressBar interface {
 // only files larger than Downloader.PartSize. It will automatically adjust the
 // concurrency for source files that do not meet minimum size for multi-part
 // downloads.
-func (c *Client) DownloadImage(ctx context.Context, dst *os.File, arch, path, tag string, spec *Downloader, pb ProgressBar) error {
+func (c *Client) ConcurrentDownloadImage(ctx context.Context, dst *os.File, arch, path, tag string, spec *Downloader, pb ProgressBar) error {
 	if pb == nil {
 		pb = &NoopProgressBar{}
 	}
 
 	if strings.Contains(path, ":") {
-		return fmt.Errorf("malformed image path: %s", path)
+		return fmt.Errorf("%w: malformed image path: %s", errBadRequest, path)
 	}
 
 	name := strings.TrimPrefix(path, "/")
@@ -93,44 +164,45 @@ func (c *Client) DownloadImage(ctx context.Context, dst *os.File, arch, path, ta
 	}
 
 	// Check for direct OCI registry access
-	if err := c.ociDownloadImage(ctx, arch, name, tag, dst, spec, pb); err == nil {
-		return err
-	} else if !errors.Is(err, errOCIDownloadNotSupported) {
-		// Return OCI download error or fallback to legacy download
-		return err
+	if err := c.ociDownloadImage(ctx, arch, name, tag, dst, spec, pb); err != nil {
+		if !errors.Is(err, errOCIDownloadNotSupported) {
+			// Return OCI download error or fallback to legacy download
+			return err
+		}
+
+		c.Logger.Log("Fallback to (legacy) library download")
+
+		return c.legacyDownloadImage(ctx, arch, name, tag, dst, spec, pb)
 	}
-
-	c.logger.Log("Fallback to (legacy) library download")
-
-	return c.legacyDownloadImage(ctx, arch, name, tag, dst, spec, pb)
+	return nil
 }
 
 func (c *Client) legacyDownloadImage(ctx context.Context, arch, name, tag string, dst io.WriterAt, spec *Downloader, pb ProgressBar) error {
 	if arch != "" && !c.apiAtLeast(ctx, APIVersionV2ArchTags) {
-		c.logger.Log("This library does not support architecture specific tags")
-		c.logger.Log("The image returned may not be the requested architecture")
+		c.Logger.Log("This library does not support architecture specific tags")
+		c.Logger.Log("The image returned may not be the requested architecture")
 	}
 
 	apiPath := fmt.Sprintf("v1/imagefile/%v:%v", name, tag)
 	q := url.Values{}
 	q.Add("arch", arch)
 
-	c.logger.Logf("Pulling from URL: %s", apiPath)
+	c.Logger.Logf("Pulling from URL: %s", apiPath)
 
 	customHTTPClient := &http.Client{
-		Transport: c.httpClient.Transport,
+		Transport: c.HTTPClient.Transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if req.Response.StatusCode == http.StatusSeeOther {
 				return http.ErrUseLastResponse
 			}
 			maxRedir := 10
 			if len(via) >= maxRedir {
-				return fmt.Errorf("stopped after %d redirects", maxRedir)
+				return fmt.Errorf("%w: stopped after %d redirects", errHTTP, maxRedir)
 			}
 			return nil
 		},
-		Jar:     c.httpClient.Jar,
-		Timeout: c.httpClient.Timeout,
+		Jar:     c.HTTPClient.Jar,
+		Timeout: c.HTTPClient.Timeout,
 	}
 
 	req, err := c.newRequest(ctx, http.MethodGet, apiPath, q.Encode(), nil)
@@ -145,13 +217,13 @@ func (c *Client) legacyDownloadImage(ctx context.Context, arch, name, tag string
 	defer res.Body.Close()
 
 	if res.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("requested image was not found in the library")
+		return errRequestedImageNotFound
 	}
 
 	if res.StatusCode == http.StatusOK {
 		// Library endpoint does not provide HTTP redirection response, treat as single stream download
 
-		c.logger.Log("Library endpoint does not support concurrent downloads; reverting to single stream")
+		c.Logger.Log("Library endpoint does not support concurrent downloads; reverting to single stream")
 
 		size, err := parseContentLengthHeader(res.Header.Get("Content-Length"))
 		if err != nil {
@@ -162,7 +234,10 @@ func (c *Client) legacyDownloadImage(ctx context.Context, arch, name, tag string
 	}
 
 	if res.StatusCode != http.StatusSeeOther {
-		return fmt.Errorf("unexpected HTTP status %d: %v", res.StatusCode, err)
+		if res.StatusCode == http.StatusUnauthorized {
+			return ErrUnauthorized
+		}
+		return fmt.Errorf("%w: unexpected http status %d", errHTTP, res.StatusCode)
 	}
 
 	// Get image metadata to determine image size
@@ -177,9 +252,9 @@ func (c *Client) legacyDownloadImage(ctx context.Context, arch, name, tag string
 	}
 
 	var creds credentials
-	if c.authToken != "" && samehost(c.baseURL, redirectURL) {
+	if c.AuthToken != "" && samehost(c.BaseURL, redirectURL) {
 		// Only include credentials if redirected to same host as base URL
-		creds = bearerTokenCredentials{authToken: c.authToken}
+		creds = bearerTokenCredentials{authToken: c.AuthToken}
 	}
 
 	// Use redirect URL to download artifact
@@ -201,7 +276,7 @@ func parseContentLengthHeader(val string) (int64, error) {
 	}
 	size, err := strconv.ParseInt(val, 10, 64)
 	if err != nil {
-		return -1, fmt.Errorf("parsing Content-Length header %v: %v", val, err)
+		return -1, fmt.Errorf("parsing Content-Length header %v: %w", val, err)
 	}
 	return size, nil
 }
@@ -221,7 +296,7 @@ func (c *Client) download(_ context.Context, w io.WriterAt, r io.Reader, size in
 		return err
 	}
 
-	c.logger.Logf("Downloaded %v byte(s)", written)
+	c.Logger.Logf("Downloaded %v byte(s)", written)
 
 	return nil
 }
