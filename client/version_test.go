@@ -9,7 +9,7 @@ import (
 	"context"
 	"testing"
 
-	jsonresp "github.com/sylabs/json-resp"
+	jsonresp "github.com/apptainer/json-resp"
 )
 
 func Test_apiAtLeast(t *testing.T) {

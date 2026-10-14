@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"net/url"
 
-	jsonresp "github.com/sylabs/json-resp"
+	jsonresp "github.com/apptainer/json-resp"
 )
 
 // getEntity returns the specified entity; returns ErrNotFound if entity is not
