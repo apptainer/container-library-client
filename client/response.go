@@ -6,7 +6,7 @@
 package client
 
 import (
-	jsonresp "github.com/sylabs/json-resp"
+	jsonresp "github.com/apptainer/json-resp"
 )
 
 // EntityResponse - Response from the API for an Entity request

@@ -15,7 +15,7 @@ import (
 	"net/url"
 	"strings"
 
-	jsonresp "github.com/sylabs/json-resp"
+	jsonresp "github.com/apptainer/json-resp"
 	"golang.org/x/sync/errgroup"
 )
 

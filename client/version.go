@@ -9,8 +9,8 @@ import (
 	"context"
 	"net/http"
 
+	jsonresp "github.com/apptainer/json-resp"
 	"github.com/blang/semver/v4"
-	jsonresp "github.com/sylabs/json-resp"
 )
 
 const (

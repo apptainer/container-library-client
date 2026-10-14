@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"net/url"
 
-	jsonresp "github.com/sylabs/json-resp"
+	jsonresp "github.com/apptainer/json-resp"
 )
 
 func (c *Client) apiGet(ctx context.Context, path string) (objJSON []byte, err error) {

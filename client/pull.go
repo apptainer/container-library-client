@@ -16,7 +16,7 @@ import (
 	"strconv"
 	"strings"
 
-	jsonresp "github.com/sylabs/json-resp"
+	jsonresp "github.com/apptainer/json-resp"
 )
 
 var errRequestedImageNotFound = fmt.Errorf("requested image was not found in the library")

@@ -14,7 +14,7 @@ import (
 	"reflect"
 	"testing"
 
-	jsonresp "github.com/sylabs/json-resp"
+	jsonresp "github.com/apptainer/json-resp"
 )
 
 const (
